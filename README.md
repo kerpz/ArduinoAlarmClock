@@ -72,7 +72,7 @@ Screenshots (Serial control for setting the date, time, and alarm)
 Screenshots (LCD 128x64)
 ---------------
 
-![Alt text](https://raw.github.com/kerpz/ArduinoAlarmClock/master/images/arduino_atmega328_lcd_128x64_03.png "Main Display")
+![Alt text](https://raw.github.com/kerpz/ArduinoAlarmClock/master/images/arduino_atmega328_lcd_128x64_01.png "Main Display")
 
 TODO
 -----
