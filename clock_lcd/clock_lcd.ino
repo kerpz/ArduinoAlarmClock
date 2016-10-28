@@ -1,24 +1,67 @@
-#include <LiquidCrystal.h>
-//#include <DHT.h>
-//#include <IRremote.h>
+/*
+ Author:
+ - Philip Bordado (kerpz@yahoo.com)
 
-// initialize the interface pins
+ Hardware:
+ - Arduino UNO (Compatible board)
+ - Tact switch
+ - Piezo Buzzer
+ - LCD 16x2 and 10k Potentiometer
+ 
+ Software:
+ - Arduino 1.6.9
+ - LiquidCrystal (Library)
+   
+ Arduino Pin Mapping:
+
+ - 00 = Serial RX
+ - 01 = Serial TX
+ - 02
+ - 03
+ - 04 = LCD D7
+ - 05 = LCD D6
+ - 06 = LCD D5
+ - 07 = LCD D4
+ - 08 = LCD EN
+ - 09 = LCD RS
+ - 10
+ - 11
+ - 12
+ - 13 = Piezo buzzer (+)
+
+ - 14 = (A0)
+ - 15 = (A1)
+ - 16 = (A2)
+ - 17 = (A3) Navigation Button
+ - 18 = (A4) I2C
+ - 19 = (A5) I2C
+
+ Potentiometer
+ - END = 5V
+ - MID = LCD VO
+ - END = GND
+  
+*/
+
+//#include <EEPROM.h>
+
+//#define LCD_i2c TRUE // Using LCD 16x2 I2C mode
+
+#if defined(LCD_i2c)
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7);
+#else
+#include <LiquidCrystal.h>
 LiquidCrystal lcd(9, 8, 7, 6, 5, 4);
+#endif
+
+//#include <DHT.h>
 //DHT dht(7, DHT11);
 
+//#include <IRremote.h>
 //IRrecv irrecv(11);
 //decode_results results;
 
-#define DEBOUNCEDELAY 10  // button debouncer, how many ms to debounce, 5+ ms is usually plenty
-#define LONGPRESSDELAY 2000  // button debouncer, how many ms to debounce, 5+ ms is usually plenty
-
-byte buttons[] = {15, 16, 17, 18, 19}; // enter,up,down,left,right
-#define NUMBUTTONS sizeof(buttons)
-int lastButtonState[NUMBUTTONS];
-bool buttonActive[NUMBUTTONS];
-unsigned long lastDebounceTime[NUMBUTTONS];
-
-#define runEvery(t) for (static typeof(t) _lasttime;(typeof(t))((typeof(t))millis() - _lasttime) > (t);_lasttime += (t))
 
 //float temperature, humidity, heat_index;
 
@@ -114,13 +157,13 @@ byte bar8[8] =
 
 byte incomingByte = 0;   // for incoming serial data
 
-byte second = 0, minute = 0, hour = 0, weekday = 0, day = 5, month = 6, feb = 28;
+byte second = 0, minute = 0, hour = 0, weekday = 0, day = 21, month = 6, feb = 28;
 int year = 2016;
 
-byte a1_second = 0, a1_minute = 0, a1_hour = 0, a1_duration = 20; // alarm 1
+byte a1_second = 0, a1_minute = 0, a1_hour = 0, a1_duration = 0; // alarm 1
 byte a2_second = 0, a2_minute = 0, a2_hour = 0, a2_duration = 0; // alarm 2
-bool a1_enabled = 0; // 0=off,1=on
-bool a2_enabled = 0; // 0=off,1=on
+//bool a1_enabled = 0; // 0=off,1=on
+//bool a2_enabled = 0; // 0=off,1=on
 
 bool a_signal = 0; // 0=off,1=on
 
@@ -128,7 +171,7 @@ byte adj_select = 0;   // 0=none,1=month,2=day,3=year,4=hour,5=minute,6=second,7
 byte pag_select = 0;   // page
 //byte a_setmode = 0;   // 0=none,1-7=a_weekbits,8=a_hour,9=a_minute,10=a_duration
 
-bool hour_mode = 0;   // 0=24hr,1=12hr
+bool hour_mode = 1;   // 0=24hr,1=12hr
 
 const char *months[]={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
 const char *weekdays[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
@@ -494,11 +537,11 @@ void adjClock(byte adj) { // 0 --, 1 ++
     case 13: // a2_duration
       if (adj == 1) {
         a2_duration++;
-        if (a2_duration > 90) a2_duration = 1;
+        if (a2_duration > 30) a2_duration = 0;
       }
       else {
         a2_duration--;
-        if (a2_duration > 90) a2_duration = 90;
+        if (a2_duration > 30) a2_duration = 30;
       }
       break;
     default:
@@ -507,104 +550,6 @@ void adjClock(byte adj) { // 0 --, 1 ++
   weekday = get_weekday(year, month, day);
 }
 
-int getButtonState(int number) {
-  int reading = digitalRead(buttons[number]);
-
-  //Check if button state has changed since last check
-  if (reading != lastButtonState[number]) {
-    if (reading == HIGH && !buttonActive[number]) {
-      lastButtonState[number] = reading;
-      //Return 0 (not pressed)
-      return 0;
-    }
-    
-    //if reading is high (open)
-    if (reading == HIGH && buttonActive[number]) {
-      if (millis() - lastDebounceTime[number] > DEBOUNCEDELAY) {
-        lastButtonState[number] = reading;
-        buttonActive[number] = true;
-        //Return 1 (short press)
-        return 1;
-      }
-
-      lastButtonState[number] = reading;
-      buttonActive[number] = false;
-      //Return 0 (not pressed)
-      return 0;
-    }
-    
-    //if reading is low (closed)
-    else if (reading == LOW) {
-      if (!buttonActive[number]) {
-        //Start debounce timer
-        lastDebounceTime[number] = millis();
-        lastButtonState[number] = reading;
-        buttonActive[number] = true;
-        //Return 0 (not pressed)
-        return 0;
-      }
-      //Return 0 (not pressed)
-      return 0;
-    }
-  }
-
-  //Check if reading still high (open)
-  if (reading == HIGH) {
-    lastButtonState[number] = reading;
-    buttonActive[number] = false;
-    //Return 0 (not pressed)
-    return 0;
-  }
-
-  
-  if (reading == LOW) {
-    //Check if button pressed for long enough to register as long press
-    if (millis() - lastDebounceTime[number] > LONGPRESSDELAY && buttonActive[number]) {
-      lastButtonState[number] = reading;
-      buttonActive[number]=false;
-      //Return 2 (long press)
-      return 2;
-    }
-    else
-      //Return 0 (not pressed)
-      return 0;
-  }
-}
-
-void decodeButtons(void) {
-  for (int x=0; x<NUMBUTTONS; x++) {
-    int state = getButtonState(x);
-
-    if (state == 1) { // short press
-      switch (x) {
-        case 15: // enter
-          break;
-        case 16: // up
-          break;
-        case 17: // down
-          break;
-        case 18: // left
-          break;
-        case 19: // right
-          break;
-      }
-    }
-    else if (state == 2) { // long press
-      switch (x) {
-        case 15: // enter
-          break;
-        case 16: // up
-          break;
-        case 17: // down
-          break;
-        case 18: // left
-          break;
-        case 19: // right
-          break;
-      }
-    }
-  }
-}
 
 void decodeSerial(byte incomingByte) {
   switch (incomingByte) {
@@ -636,6 +581,7 @@ void decodeSerial(byte incomingByte) {
        break;
      */
     case 0xD: // enter // ok
+      // set enabled
       if (pag_select == 1) {
         if (adj_select == 0)
           adj_select = 1;
@@ -1056,43 +1002,12 @@ void displayAlarmSettings(bool bblink) {
   }
 }
 
-void setup()
-{
-  Serial.begin(115200);
-  //irrecv.enableIRIn(); // Start the receiver
-
-  for (int x=0; x<NUMBUTTONS; x++)
-  {
-    lastButtonState[x] = HIGH;
-    buttonActive[x] = false;
-    lastDebounceTime[x] = 0;
-   // buttonState[x] = HIGH;
-    pinMode(buttons[x], INPUT_PULLUP);
-  }
-
-  pinMode(13, OUTPUT); // piezo buzzer
-  
-  // assignes each segment a write number
-  lcd.createChar(1,bar1);
-  lcd.createChar(2,bar2);
-  lcd.createChar(3,bar3);
-  lcd.createChar(4,bar4);
-  lcd.createChar(5,bar5);
-  lcd.createChar(6,bar6);
-  lcd.createChar(7,bar7);
-  lcd.createChar(8,bar8);
-  
-  // sets the LCD's rows and colums:
-  lcd.begin(16, 2);
-
-  weekday = get_weekday(year, month, day);
-}
-
-void loop()
-{
+void procClock() {
+  static unsigned long msTick = millis();
   static bool dispblink = false;
 
-  runEvery(500) {
+  if (millis() - msTick >= 500) { // run every 500 ms
+    msTick = millis();
     dispblink = !dispblink;
 
     switch (pag_select) {
@@ -1114,6 +1029,143 @@ void loop()
       checkAlarm();
     }
   }
+}
+
+void procButtons() {
+  static unsigned long buttonsTick = 0;
+  static int button_press_old = HIGH;
+  static byte cnt;
+
+  int button_press_new = digitalRead(17);
+
+  if (button_press_new != button_press_old) { // change state
+    if (button_press_new == HIGH) { // on released
+      if (millis() - buttonsTick >= 1000) { // long press 1s
+        
+      }
+      else if (millis() - buttonsTick >= 5) { // short press 5ms
+        if (adj_select == 0) {
+          // change page
+          pag_select++;
+          if (pag_select > 2) {
+            pag_select = 0;
+          }
+        }
+        else {
+          adjClock(1);
+        }
+      }
+      buttonsTick = 0; // reset timer
+    }
+    else { // on pressed
+      buttonsTick = millis(); // start timer
+    }
+    button_press_old = button_press_new;
+  }
+
+  if (button_press_new == LOW) { // while pressed
+      if (millis() - buttonsTick == 5) { // beep @ 5 ms
+        pushPinHi(13, 50); // beep 50ms
+      }
+      else if (millis() - buttonsTick == 1000) { // beep @  1s
+        // set enabled
+        if (pag_select == 1) {
+          if (adj_select == 0)
+            adj_select = 1;
+          else
+            adj_select = 0;
+            displayTimeSettings(1);
+        }
+        else if (pag_select == 2) {
+          if (adj_select == 0)
+            adj_select = 8;
+          else
+            adj_select = 0;
+            displayAlarmSettings(1);
+        }
+        pushPinHi(13, 50); // beep 50ms
+      }
+      // here
+      if (adj_select > 0) {
+          // haxx
+          if (pag_select == 1)
+            cnt = adj_select;
+          else if (pag_select == 2)
+            cnt = adj_select - 7;
+
+        if (millis() - buttonsTick == (1000 * (cnt + 1))) { // every 1s change adj_select
+          if (pag_select == 1) {
+            if (adj_select < 7) {
+              adj_select++;
+            }
+            else {
+              adj_select = 0; // off
+            }
+            displayTimeSettings(1);
+          }
+          else if (pag_select == 2) {
+            if (adj_select < 13) {
+              adj_select++;
+            }
+            else {
+              adj_select = 0; // off
+            }
+            displayAlarmSettings(1);
+          }
+          pushPinHi(13, 50); // beep 50ms
+        }
+      }
+  }
+}
+
+void pushPinHi(byte pin, unsigned char delayms)
+{
+  digitalWrite(pin, HIGH);
+  delay(delayms);
+  digitalWrite(pin, LOW);
+}
+
+void setup()
+{
+  pinMode(13, OUTPUT); // piezo buzzer
+
+  pinMode(17, INPUT); // Button
+  digitalWrite(17, HIGH); // Configure internal pull-up resistor
+
+  Serial.begin(115200);
+  //irrecv.enableIRIn(); // Start the receiver
+
+#if defined(LCD_i2c)
+  lcd.setBacklightPin(3, POSITIVE);
+  lcd.setBacklight(HIGH); // NOTE: You can turn the backlight off by setting it to LOW instead of HIGH
+#endif
+
+  lcd.begin(16, 2); // sets the LCD's rows and colums:
+
+  // assignes each segment a write number
+  lcd.createChar(1,bar1);
+  lcd.createChar(2,bar2);
+  lcd.createChar(3,bar3);
+  lcd.createChar(4,bar4);
+  lcd.createChar(5,bar5);
+  lcd.createChar(6,bar6);
+  lcd.createChar(7,bar7);
+  lcd.createChar(8,bar8);
+
+  // initial beep
+  for (int i=0; i<3; i++) {
+    pushPinHi(13, 50); // beep 50ms
+    delay(80);
+  }
+
+  weekday = get_weekday(year, month, day);
+}
+
+void loop()
+{
+  procButtons();
+
+  procClock();
 
   // Serial listen
   if (Serial.available() > 0) {
