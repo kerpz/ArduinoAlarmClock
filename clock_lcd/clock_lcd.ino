@@ -43,9 +43,13 @@
   
 */
 
-//#include <EEPROM.h>
+#define DS3231_I2C_ADDRESS 0x68
 
-//#define LCD_i2c TRUE // Using LCD 16x2 I2C mode
+//#include <EEPROM.h>
+#include "Wire.h"
+
+
+#define LCD_i2c TRUE // Using LCD 16x2 I2C mode
 
 #if defined(LCD_i2c)
 #include <LiquidCrystal_I2C.h>
@@ -176,6 +180,75 @@ bool hour_mode = 1;   // 0=24hr,1=12hr
 const char *months[]={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
 const char *weekdays[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
 const char *hour_12s[]={"Am","Pm"};
+
+float Temperature;
+
+// Convert normal decimal numbers to binary coded decimal
+byte decToBcd(byte val)
+{
+  return( (val/10*16) + (val%10) );
+}
+// Convert binary coded decimal to normal decimal numbers
+byte bcdToDec(byte val)
+{
+  return( (val/16*10) + (val%16) );
+}
+
+void writeRTC()
+{
+  // sets time and date data to DS3231
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set next input to start at the seconds register
+  Wire.write(decToBcd(second)); // set seconds
+  Wire.write(decToBcd(minute)); // set minutes
+  Wire.write(decToBcd(hour)); // set hours
+  Wire.write(decToBcd(weekday)); // set day of week (1=Sunday, 7=Saturday)
+  Wire.write(decToBcd(day)); // set date (1 to 31)
+  Wire.write(decToBcd(month)); // set month
+  Wire.write(decToBcd(year - 2000)); // set year (0 to 99)
+  Wire.endTransmission();
+}
+void readRTC()
+{
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set DS3231 register pointer to 00h
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
+  // request seven bytes of data from DS3231 starting from register 00h
+  second = bcdToDec(Wire.read() & 0x7f);
+  minute = bcdToDec(Wire.read());
+  hour = bcdToDec(Wire.read() & 0x3f);
+  weekday = bcdToDec(Wire.read());
+  day = bcdToDec(Wire.read());
+  month = bcdToDec(Wire.read());
+  year = bcdToDec(Wire.read()) + 2000;
+}
+void readTEMP() {
+  // Checks the internal thermometer on the DS3231 and returns the 
+  // temperature as a floating-point value.
+
+  // Updated / modified a tiny bit from "Coding Badly" and "Tri-Again"
+  // http://forum.arduino.cc/index.php/topic,22301.0.html
+  
+  byte tMSB, tLSB;
+  
+  // temp registers (11h-12h) get updated automatically every 64s
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0x11);
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 2);
+
+  // Should I do more "if available" checks here?
+  if(Wire.available()) {
+    tMSB = Wire.read(); //2's complement int portion
+    tLSB = Wire.read(); //fraction portion
+
+    Temperature = ((((short)tMSB << 8) | (short)tLSB) >> 6) / 4.0;
+  }
+  else {
+    Temperature = -9999; // Some obvious error value
+  }
+}
 
 int get_weekday(int year, int month, int day)
 {
@@ -586,7 +659,10 @@ void decodeSerial(byte incomingByte) {
         if (adj_select == 0)
           adj_select = 1;
         else
+        {
           adj_select = 0;
+          writeRTC();
+        }
       }
       else if (pag_select == 2) {
         if (adj_select == 0)
@@ -1159,6 +1235,9 @@ void setup()
   }
 
   weekday = get_weekday(year, month, day);
+  
+  Wire.begin();
+  readRTC();
 }
 
 void loop()
