@@ -1205,6 +1205,9 @@ void setup()
 {
   pinMode(13, OUTPUT); // piezo buzzer
 
+  pinMode(9, OUTPUT); // ir led test
+  digitalWrite(9, HIGH); // Configure internal pull-up resistor
+
   pinMode(17, INPUT); // Button
   digitalWrite(17, HIGH); // Configure internal pull-up resistor
 
